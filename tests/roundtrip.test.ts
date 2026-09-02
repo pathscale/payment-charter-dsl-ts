@@ -90,6 +90,26 @@ const cases: Record<string, Charter> = {
     ],
   },
 
+  // The `extends` line had a code path in the emitter and no case exercising it, so a chained
+  // charter was one the two implementations had never been compared on — which is the only
+  // thing this file exists to do.
+  "a child charter, pinned to its parent": {
+    charter: "dept_travel", version: 3,
+    extends: { charter: "company_wide", version: 7 },
+    resolver: { tier: "common", version: 41 }, timezone: "UTC+00:00",
+    declarations: [
+      { kind: "asset", name: "USDC_solana", reference: SOL },
+      { kind: "group", name: "payroll_recipients", members: ["7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"] },
+      { kind: "limit", name: "dept_monthly",
+        dimension: { type: "amount", amount: "800.00", asset: "USDC_solana",
+          exceptions: [
+            { value: { type: "unlimited" },
+              when: { op: "compare", field: "counterparty", operator: "in", value: { type: "name", name: "payroll_recipients" } } },
+          ] },
+        window: { type: "fixed", unit: "month" } },
+    ],
+  },
+
   "an asset group across chains": {
     charter: "multichain", version: 1,
     resolver: { tier: "full", version: 41 }, timezone: "UTC",
