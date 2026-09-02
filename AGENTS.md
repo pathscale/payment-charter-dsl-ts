@@ -15,7 +15,7 @@ types, JSON Schema, and the emitter. Built with `bun`.
   [`payment-charter-dsl-rs`](https://github.com/pathscale/payment-charter-dsl-rs) is the
   reference implementation; where this one differs, it is this one that is wrong.
 
-- **The emitter comes first and emits the canonical text form (§1.1).** Byte-identical, not
+- **The emitter comes first and emits the canonical text form (§1.2).** Byte-identical, not
   semantically equivalent. That is what lets it be verified by round-tripping through the Rust
   parser instead of needing its own conformance suite.
 

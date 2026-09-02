@@ -12,7 +12,7 @@
 
 import type {
   Charter, Condition, ConditionValue, Declaration, Escalation, Exception,
-  LimitDecl, Money, Trigger, Value, Window,
+  LimitDecl, Money, Timezone, Trigger, Value, Window,
 } from "./types.ts";
 
 export interface EmitOptions {
@@ -40,7 +40,7 @@ export function emit(charter: Charter, options: EmitOptions = {}): string {
     out.push(`extends ${charter.extends.charter}@${charter.extends.version}`);
   }
   out.push(`resolver ${charter.resolver.tier}@${charter.resolver.version}`);
-  out.push(`timezone ${charter.timezone}`);
+  out.push(`timezone ${timezone(charter.timezone)}`);
   out.push("");
 
   // Declarations grouped by kind in §1.2's order, sorted by identifier within each kind.
@@ -161,7 +161,7 @@ function window(w: Window): string {
   if (w.type === "rolling") return `per rolling ${w.count} ${w.unit}`;
   // Durations and calendar units keep the unit the author used: the unit is significant
   // (§8.3) and is not normalised.
-  return w.timezone ? `per fixed ${w.unit} in ${w.timezone}` : `per fixed ${w.unit}`;
+  return w.timezone ? `per fixed ${w.unit} in ${timezone(w.timezone)}` : `per fixed ${w.unit}`;
 }
 
 /**
@@ -228,6 +228,15 @@ function conditionValue(v: ConditionValue): string {
       // loses the author's grouping.
       return set(v.items.map(conditionValue));
   }
+}
+
+/**
+ * Always with an explicit offset. `UTC` is accepted on input and means `UTC+00:00` (§2.9);
+ * the canonical form is the explicit one, so every timezone in an emitted document has the
+ * same shape and a diff compares `UTC+00:00` against `UTC-05:00` rather than against a word.
+ */
+function timezone(tz: Timezone): string {
+  return tz === "UTC" ? "UTC+00:00" : tz;
 }
 
 /** `{ a, b, c }`: one space inside each brace, `, ` between items, no trailing comma. */

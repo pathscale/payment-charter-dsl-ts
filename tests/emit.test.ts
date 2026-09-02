@@ -166,7 +166,7 @@ describe("asset groups", () => {
     expect(emit(c)).toBe(
 `charter multichain version 1
 resolver full@41
-timezone UTC
+timezone UTC+00:00
 
   asset USDC_ethereum = ${ETH}
   asset USDC_solana = ${SOL}

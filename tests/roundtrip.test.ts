@@ -168,3 +168,34 @@ describe("emitted text is accepted by the Rust parser", () => {
     }
   });
 });
+
+async function canonicaliseWithRust(text: string): Promise<string> {
+  const proc = Bun.spawn(["cargo", "run", "-q", "--bin", "charter-emit"], {
+    cwd: RS,
+    stdin: new TextEncoder().encode(text),
+    stdout: "pipe",
+    stderr: "pipe",
+    env: { ...process.env, PATH: `/opt/homebrew/opt/rustup/bin:${process.env.PATH}` },
+  });
+  const [out, err, code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  if (code !== 0) throw new Error(`charter-emit failed:\n${err}`);
+  return out;
+}
+
+describe("the two emitters agree byte for byte", () => {
+  // The real drift check. It is not enough that Rust *accepts* what TypeScript emits: if
+  // TypeScript's output is canonical, then parsing and re-emitting it in Rust must return the
+  // identical bytes. Any disagreement about indentation, ordering, spacing or separation shows
+  // up here as a diff, which is precisely what a semantic comparison would have hidden.
+  for (const [name, charter] of Object.entries(cases)) {
+    test(name, async () => {
+      const fromTs = emit(charter);
+      const fromRust = await canonicaliseWithRust(fromTs);
+      expect(fromRust).toBe(fromTs);
+    }, 120_000);
+  }
+});
