@@ -13,7 +13,7 @@
 import type {
   Charter, Condition, ConditionValue, Declaration, Escalation, Exception,
   LimitDecl, Money, Timezone, Trigger, Value, Window,
-} from "./types.ts";
+} from "./types.js";
 
 export interface EmitOptions {
   /**

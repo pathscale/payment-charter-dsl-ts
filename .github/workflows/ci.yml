@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubicloud-standard-2
+    steps:
+      - uses: actions/checkout@v4
+
+      # The round-trip suite drives the Rust parser and emitter: it is what stops the two
+      # implementations agreeing on meaning while disagreeing on bytes.
+      - name: Checkout payment-charter-dsl-rs
+        uses: actions/checkout@v4
+        with:
+          repository: pathscale/payment-charter-dsl-rs
+          path: ../payment-charter-dsl-rs
+
+      - name: Checkout the spec and corpus
+        uses: actions/checkout@v4
+        with:
+          repository: pathscale/payment-charter-dsl
+          path: ../payment-charter-dsl
+
+      - uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - run: bun install --frozen-lockfile || bun install
+
+      - name: Type check
+        run: bun run typecheck
+
+      - name: Build
+        run: bun run build
+
+      - name: Test
+        run: bun test

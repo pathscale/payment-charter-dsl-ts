@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { emit } from "../src/emit.ts";
-import type { Charter } from "../src/types.ts";
+import { emit } from "../src/emit.js";
+import type { Charter } from "../src/types.js";
 
 const SOL = "mint://USDC/Circle/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
 const ETH = "mint://USDC/Circle/0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48/eip155:1";

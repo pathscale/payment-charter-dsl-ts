@@ -11,8 +11,8 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { emit } from "../src/emit.ts";
-import type { Charter } from "../src/types.ts";
+import { emit } from "../src/emit.js";
+import type { Charter } from "../src/types.js";
 
 const RS = new URL("../../payment-charter-dsl-rs/", import.meta.url).pathname;
 

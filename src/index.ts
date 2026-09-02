@@ -11,5 +11,5 @@
  * asset's scale (§1.1), so scaling is padding and there is no bignum library.
  */
 
-export { emit, type EmitOptions } from "./emit.ts";
-export type * from "./types.ts";
+export { emit, type EmitOptions } from "./emit.js";
+export type * from "./types.js";

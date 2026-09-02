@@ -1,0 +1,141 @@
+name: Release
+
+# Publishing uses npm Trusted Publishing (OIDC), so no NPM_TOKEN exists in this
+# repository. It needs one-time setup on npmjs.com before the first release:
+#
+#   @pathscale/payment-charter-dsl -> Settings -> Trusted Publisher -> GitHub Actions
+#   repository: pathscale/payment-charter-dsl-ts, workflow: release.yml
+#
+# Without it the publish step fails closed rather than publishing unauthenticated.
+#
+# The version is whatever package.json says. This package is a specification
+# artifact rather than a product, so a release is deliberate: bump the version in
+# a commit and push, and this ships it. Pushing without a bump publishes nothing.
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  decide:
+    runs-on: ubicloud-standard-2
+    outputs:
+      version: ${{ steps.decide.outputs.version }}
+      publish: ${{ steps.decide.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - id: decide
+        run: |
+          current="$(node -p "require('./package.json').version")"
+          echo "version=$current" >> "$GITHUB_OUTPUT"
+          if npm view "@pathscale/payment-charter-dsl@$current" version >/dev/null 2>&1; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::$current is already on npm — nothing to do"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::publishing $current"
+          fi
+
+  prepare:
+    needs: decide
+    if: needs.decide.outputs.publish == 'true'
+    runs-on: ubicloud-standard-2
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout payment-charter-dsl-rs
+        uses: actions/checkout@v4
+        with:
+          repository: pathscale/payment-charter-dsl-rs
+          path: ../payment-charter-dsl-rs
+
+      - name: Checkout the spec and corpus
+        uses: actions/checkout@v4
+        with:
+          repository: pathscale/payment-charter-dsl
+          path: ../payment-charter-dsl
+
+      - uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: dtolnay/rust-toolchain@stable
+
+      - run: bun install
+
+      # Gates before the tarball exists. A version can never be reused, so every
+      # check that can fail must fail before anything ships.
+      - run: bun run typecheck
+      - run: bun run build
+
+      # The cross-implementation check. It is not enough that Rust accepts what
+      # this emits: re-emitting it in Rust must return identical bytes.
+      - run: bun test
+
+      - name: publint (publish config, exports, file paths)
+        run: npx --yes publint --strict
+
+      - name: Pack
+        run: |
+          mkdir -p release
+          npm pack --pack-destination release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-package
+          path: release/*.tgz
+          if-no-files-found: error
+
+  publish:
+    needs: [decide, prepare]
+    # GitHub-hosted, not Ubicloud: npm provenance attestation requires it.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # OIDC trusted publishing + provenance
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-package
+          path: release
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Require npm with OIDC support
+        run: |
+          npm_version="$(npm --version)"
+          node -e '
+            const [major, minor, patch = 0] = process.argv[1].split(".").map(Number);
+            if (major < 11 || (major === 11 && (minor < 5 || (minor === 5 && patch < 1)))) process.exit(1);
+          ' "$npm_version" || {
+            echo "npm 11.5.1 or newer is required for Trusted Publishing; found $npm_version"
+            exit 1
+          }
+      - name: Publish to npm
+        run: npm publish ./release/*.tgz --access public
+
+  tag:
+    needs: [decide, publish]
+    runs-on: ubicloud-standard-2
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.decide.outputs.version }}
+        run: |
+          gh release create "v$VERSION" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "v$VERSION" \
+            --generate-notes
