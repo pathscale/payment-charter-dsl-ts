@@ -1,0 +1,459 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/pathscale/payment-charter-dsl/charter.schema.json",
+  "title": "Payment Charter",
+  "description": "The JSON form of a charter (spec §1.1). Mirrors the grammar of §3 one-for-one. Money is a decimal string carrying the digits the author wrote, never a JSON number: §2.6's nine-decimal cap keeps money inside u64 and not inside 2^53, which a nine-decimal asset crosses at about nine million tokens.",
+  "type": "object",
+  "required": ["charter", "version", "resolver", "timezone", "declarations"],
+  "additionalProperties": false,
+  "properties": {
+    "charter": { "$ref": "#/$defs/name" },
+    "version": { "$ref": "#/$defs/uint" },
+    "extends": {
+      "description": "§8A. A charter extends at most one parent; two parents give a limit two ceilings with no defined composition (E312).",
+      "type": "object",
+      "required": ["charter", "version"],
+      "additionalProperties": false,
+      "properties": {
+        "charter": { "$ref": "#/$defs/name" },
+        "version": { "$ref": "#/$defs/uint" }
+      }
+    },
+    "resolver": {
+      "type": "object",
+      "required": ["tier", "version"],
+      "additionalProperties": false,
+      "properties": {
+        "tier": { "enum": ["common", "full"] },
+        "version": { "$ref": "#/$defs/uint" }
+      }
+    },
+    "timezone": { "$ref": "#/$defs/timezone" },
+    "declarations": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/declaration" }
+    }
+  },
+
+  "$defs": {
+    "name": {
+      "description": "§2.4. ASCII, no dots, no escapes anywhere in this language.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$"
+    },
+    "uint": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+
+    "money": {
+      "description": "Digits as the author wrote them, not minor units: \"100.00\", never \"100000000\". The scale is the asset's and the asset is named beside it, so a reader diffing the JSON sees what the text says. Minor-unit conversion happens at compile time where the resolver supplies decimals.",
+      "type": "string",
+      "pattern": "^[0-9]+(\\.[0-9]+)?$"
+    },
+
+    "timezone": {
+      "description": "§2.9. UTC with an optional fixed offset. No IANA zone names and no daylight saving: a boundary is arithmetic, so the enclave needs no database and a tzdata update cannot change what an already-signed charter means. Offsets run -12:00 to +14:00 with quarter-hour minutes.",
+      "type": "string",
+      "pattern": "^UTC([+-](0[0-9]|1[0-4]):(00|15|30|45))?$"
+    },
+
+    "assetRef": {
+      "description": "§2.10. Emitted as the native four-segment form; CAIP-19 is accepted on input and never produced.",
+      "type": "string",
+      "pattern": "^(mint://[^/]+/[^/]+/[^/]+/[^/]+|unit://[A-Z]{3}/[^/]+)$"
+    },
+
+    "instrumentRef": {
+      "description": "§S26. The handle is an opaque, non-secret identifier. A PAN, CVV, expiry, private key or seed phrase here is a conformance failure: a charter is reviewed, diffed, signed and handed to an auditor.",
+      "type": "string",
+      "pattern": "^(card://[a-z0-9]{2,16}/[A-Za-z0-9_-]{1,64}|wallet://[a-z0-9]{3,8}:[A-Za-z0-9_-]{1,32}/[A-Za-z0-9]{1,128})$"
+    },
+
+    "literal": {
+      "description": "§2.11. An address, or a tagged literal whose tag belongs to exactly one field: mcc to merchant.category, country to merchant.country, class to asset.class.",
+      "type": "string",
+      "pattern": "^([A-Za-z0-9]{1,128}|(mcc|country|class):[A-Za-z0-9_-]{1,32})$"
+    },
+
+    "declaration": {
+      "oneOf": [
+        { "$ref": "#/$defs/assetDecl" },
+        { "$ref": "#/$defs/assetGroupDecl" },
+        { "$ref": "#/$defs/instrumentDecl" },
+        { "$ref": "#/$defs/groupDecl" },
+        { "$ref": "#/$defs/approversDecl" },
+        { "$ref": "#/$defs/prohibitDecl" },
+        { "$ref": "#/$defs/limitDecl" }
+      ]
+    },
+
+    "assetDecl": {
+      "type": "object",
+      "required": ["kind", "name", "reference"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "asset" },
+        "name": {
+          "$ref": "#/$defs/name",
+          "description": "S19/S20: begins with the reference's symbol, is never the bare symbol, and never ends _group."
+        },
+        "reference": { "$ref": "#/$defs/assetRef" }
+      }
+    },
+
+    "assetGroupDecl": {
+      "description": "S22. Several deployments of one asset — same symbol, same issuer, same decimals — with one accumulator across them.",
+      "type": "object",
+      "required": ["kind", "name", "members"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "asset_group" },
+        "name": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[A-Za-z_][A-Za-z0-9_-]*_group$",
+          "description": "S20.1: ends _group, because `amount 100.00 X` means one chain or all of them and nothing else discloses which."
+        },
+        "members": {
+          "type": "array",
+          "minItems": 2,
+          "items": { "$ref": "#/$defs/name" }
+        }
+      }
+    },
+
+    "instrumentDecl": {
+      "description": "S25. An identity, never a ceiling: every cap on an instrument is an ordinary limit with `for instrument is …`.",
+      "type": "object",
+      "required": ["kind", "name", "reference"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "instrument" },
+        "name": { "$ref": "#/$defs/name" },
+        "reference": { "$ref": "#/$defs/instrumentRef" }
+      }
+    },
+
+    "groupDecl": {
+      "type": "object",
+      "required": ["kind", "name", "members"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "group" },
+        "name": { "$ref": "#/$defs/name" },
+        "members": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/literal" }
+        }
+      }
+    },
+
+    "approversDecl": {
+      "type": "object",
+      "required": ["kind", "name", "members"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "approvers" },
+        "name": { "$ref": "#/$defs/name" },
+        "members": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/name" }
+        }
+      }
+    },
+
+    "prohibitDecl": {
+      "description": "§8.2.1. Evaluated before any limit; final, unescalatable, and it moves no accumulator.",
+      "type": "object",
+      "required": ["kind", "name", "condition"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "prohibit" },
+        "name": { "$ref": "#/$defs/name" },
+        "condition": { "$ref": "#/$defs/condition" }
+      }
+    },
+
+    "limitDecl": {
+      "type": "object",
+      "required": ["kind", "name", "dimension", "window"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "limit" },
+        "name": { "$ref": "#/$defs/name" },
+        "dimension": { "$ref": "#/$defs/dimension" },
+        "applies": {
+          "$ref": "#/$defs/condition",
+          "description": "The `for` clause (S23). Absent means the limit applies to every request in its asset. S24 denies a request no limit applies to."
+        },
+        "window": { "$ref": "#/$defs/window" },
+        "scope": { "enum": ["account", "agent", "instrument", "counterparty"] },
+        "escalations": {
+          "type": "array",
+          "maxItems": 2,
+          "items": { "$ref": "#/$defs/escalation" },
+          "description": "S15/S17: at most one per trigger kind, where `above` and `at least` are one kind."
+        }
+      }
+    },
+
+    "dimension": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["type", "amount", "asset"],
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "amount" },
+            "amount": { "$ref": "#/$defs/money" },
+            "asset": { "$ref": "#/$defs/name" },
+            "exceptions": { "type": "array", "items": { "$ref": "#/$defs/exception" } }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type", "count"],
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "count" },
+            "count": { "$ref": "#/$defs/uint" },
+            "exceptions": { "type": "array", "items": { "$ref": "#/$defs/exception" } }
+          }
+        }
+      ]
+    },
+
+    "exception": {
+      "description": "S4: exceptions within one dimension must be provably disjoint. Prohibitions are exempt and are a separate declaration.",
+      "type": "object",
+      "required": ["value", "when"],
+      "additionalProperties": false,
+      "properties": {
+        "value": { "$ref": "#/$defs/value_" },
+        "when": { "$ref": "#/$defs/condition" }
+      }
+    },
+
+    "value_": {
+      "description": "An exception or escalation value. There is no `deny`: prohibition is its own declaration (E103).",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["type", "amount", "asset"],
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "amount" },
+            "amount": { "$ref": "#/$defs/money" },
+            "asset": { "$ref": "#/$defs/name" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type", "count"],
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "count" },
+            "count": { "$ref": "#/$defs/uint" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type"],
+          "additionalProperties": false,
+          "properties": { "type": { "const": "unlimited" } },
+          "description": "H4: legal only in a charter that extends another (E314), where it resolves to the parent's ceiling."
+        }
+      ]
+    },
+
+    "window": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["type", "count", "unit"],
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "rolling" },
+            "count": { "$ref": "#/$defs/uint" },
+            "unit": { "enum": ["second", "seconds", "minute", "minutes", "hour", "hours", "day", "days"] }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type", "unit"],
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "fixed" },
+            "unit": { "enum": ["day", "week", "month", "year"] },
+            "timezone": {
+              "$ref": "#/$defs/timezone",
+              "description": "§5.4: overrides the charter offset for this window's alignment only, never for date conditions."
+            }
+          }
+        }
+      ]
+    },
+
+    "escalation": {
+      "type": "object",
+      "required": ["trigger", "quorum", "approvers", "ceiling"],
+      "additionalProperties": false,
+      "properties": {
+        "trigger": { "$ref": "#/$defs/trigger" },
+        "quorum": { "$ref": "#/$defs/uint" },
+        "approvers": { "$ref": "#/$defs/name" },
+        "ceiling": {
+          "$ref": "#/$defs/value_",
+          "description": "S5: a literal, at or above the base. This is the second of the two numbers a charter states."
+        },
+        "within": {
+          "type": "object",
+          "required": ["count", "unit"],
+          "additionalProperties": false,
+          "properties": {
+            "count": { "$ref": "#/$defs/uint" },
+            "unit": { "enum": ["second", "seconds", "minute", "minutes", "hour", "hours", "day", "days"] }
+          }
+        }
+      }
+    },
+
+    "trigger": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["type", "amount", "asset"],
+          "additionalProperties": false,
+          "properties": {
+            "type": { "enum": ["above", "at_least"] },
+            "amount": { "$ref": "#/$defs/money" },
+            "asset": { "$ref": "#/$defs/name" }
+          },
+          "description": "§8.2.3. `above` fires on requested > V; `at_least` on requested >= V. Both exist because English does not agree with itself and the difference is one payment."
+        },
+        {
+          "type": "object",
+          "required": ["type", "count"],
+          "additionalProperties": false,
+          "properties": {
+            "type": { "enum": ["above", "at_least"] },
+            "count": { "$ref": "#/$defs/uint" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type"],
+          "additionalProperties": false,
+          "properties": { "type": { "const": "when_exhausted" } }
+        }
+      ]
+    },
+
+    "condition": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["op", "left", "right"],
+          "additionalProperties": false,
+          "properties": {
+            "op": { "enum": ["and", "or"] },
+            "left": { "$ref": "#/$defs/condition" },
+            "right": { "$ref": "#/$defs/condition" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["op", "operand"],
+          "additionalProperties": false,
+          "properties": {
+            "op": { "const": "not" },
+            "operand": { "$ref": "#/$defs/condition" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["op", "field", "operator", "value"],
+          "additionalProperties": false,
+          "properties": {
+            "op": { "const": "compare" },
+            "field": {
+              "enum": [
+                "counterparty", "asset", "asset.class", "instrument",
+                "merchant.category", "merchant.country",
+                "provenance", "provenance.recipient", "provenance.amount",
+                "provenance.asset", "provenance.venue", "date"
+              ],
+              "description": "§6. A closed enumeration. Adding a field is an engine change under review, not an authoring capability (S2)."
+            },
+            "operator": { "enum": ["is", "is not", "in", "not in", "before", "after", "is at least"] },
+            "value": { "$ref": "#/$defs/conditionValue" }
+          }
+        }
+      ]
+    },
+
+    "conditionValue": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["type", "name"],
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "name" },
+            "name": {
+              "$ref": "#/$defs/name",
+              "description": "S21/S28: names a declaration in this document, of the kind the field requires. The resolver is not a namespace and a parent charter does not export declarations."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type", "literal"],
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "literal" },
+            "literal": { "$ref": "#/$defs/literal" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type", "date"],
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "date" },
+            "date": {
+              "type": "string",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+              "description": "§2.8. A local calendar date in the charter's offset, not an instant."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type", "plane"],
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "plane" },
+            "plane": { "enum": ["principal", "agent", "merchant", "network"] }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["type", "items"],
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "set" },
+            "items": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "$ref": "#/$defs/conditionValue" }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
