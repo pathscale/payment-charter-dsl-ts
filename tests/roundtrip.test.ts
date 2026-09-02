@@ -11,6 +11,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import { documentCeiling } from "../src/ceiling.js";
 import { emit } from "../src/emit.js";
 import type { Charter } from "../src/types.js";
 
@@ -219,6 +220,63 @@ describe("the two emitters agree byte for byte", () => {
       const fromTs = emit(charter);
       const fromRust = await canonicaliseWithRust(fromTs);
       expect(fromRust).toBe(fromTs);
+    }, 120_000);
+  }
+});
+
+/**
+ * S5.1 across implementations.
+ *
+ * `charter-compile` emits `ceiling <asset> <minor units>` — the sum per asset of what the whole
+ * charter authorises, which the spec calls the number a controller is owed and the one no single
+ * limit states. `documentCeiling` computes the same figure from the JSON form.
+ *
+ * Two independent answers to "how much can this thing spend" is the failure this repository
+ * exists to prevent, and it is worse than a layout disagreement: nobody reviews a total by
+ * eye, so the two could differ for a long time without anyone noticing.
+ */
+async function compileWithRust(text: string): Promise<string> {
+  const proc = Bun.spawn(["cargo", "run", "-q", "--bin", "charter-compile"], {
+    cwd: RS,
+    stdin: new TextEncoder().encode(text),
+    stdout: "pipe",
+    stderr: "pipe",
+    env: { ...process.env, PATH: `/opt/homebrew/opt/rustup/bin:${process.env.PATH}` },
+  });
+  const [out, , code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  expect(code).toBe(0);
+  return out;
+}
+
+/** `500.00` at two decimals is `50000`, which is how the compiled form carries money. */
+function toMinorUnits(decimal: string, decimals: number): string {
+  const [whole = "0", frac = ""] = decimal.split(".");
+  const scaled = whole + frac.padEnd(decimals, "0");
+  return scaled.replace(/^0+(?=\d)/, "");
+}
+
+describe("both implementations compute the same document ceiling", () => {
+  for (const [name, charter] of Object.entries(cases)) {
+    test(name, async () => {
+      // charter-compile resolves every asset at two decimals, so the emitted text must be
+      // scaled the same way for the two figures to be comparable at all.
+      const compiled = await compileWithRust(emit(charter));
+      const fromRust = compiled
+        .split("\n")
+        .filter((l) => l.startsWith("ceiling "))
+        .map((l) => l.split(" "))
+        .map(([, asset = "", total = ""]) => `${asset} ${total}`)
+        .sort();
+
+      const fromTypeScript = documentCeiling(charter)
+        .map((c) => `${c.asset} ${toMinorUnits(c.total, 2)}`)
+        .sort();
+
+      expect(fromTypeScript).toEqual(fromRust);
     }, 120_000);
   }
 });
