@@ -176,7 +176,16 @@ function money(m: Money, asset: string, options: EmitOptions): string {
   const decimals = options.decimals?.[asset];
   if (decimals === undefined) return m;
 
-  const [whole, fraction = ""] = m.split(".");
+  // `split` is typed as possibly-empty under noUncheckedIndexedAccess, and the schema's
+  // pattern already guarantees at least one digit before any point — so assert the invariant
+  // here rather than defaulting, which would silently emit "undefined.00" for a malformed
+  // input instead of failing.
+  const parts = m.split(".");
+  const whole = parts[0];
+  const fraction = parts[1] ?? "";
+  if (whole === undefined || parts.length > 2) {
+    throw new RangeError(`${m} is not a decimal amount`);
+  }
   if (fraction.length > decimals) {
     // E202: a literal that cannot be represented exactly is an error, never a rounding.
     throw new RangeError(

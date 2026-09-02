@@ -81,6 +81,10 @@ jobs:
       # this emits: re-emitting it in Rust must return identical bytes.
       - run: bun test
 
+      # Exercises what actually ships rather than the source tree: a file missing from
+      # `files`, an export map that does not resolve, an import that kept its .ts extension.
+      - run: bun run smoke
+
       - name: publint (publish config, exports, file paths)
         run: npx --yes publint --strict
 
