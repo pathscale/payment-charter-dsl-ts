@@ -14,7 +14,10 @@ import { describe, expect, test } from "bun:test";
 import { emit } from "../src/emit.js";
 import type { Charter } from "../src/types.js";
 
-const RS = new URL("../../payment-charter-dsl-rs/", import.meta.url).pathname;
+// CHARTER_RS overrides the sibling default, so CI does not have to reproduce a directory
+// layout with symlinks to satisfy a relative path.
+const RS = process.env.CHARTER_RS
+  ?? new URL("../../payment-charter-dsl-rs/", import.meta.url).pathname;
 
 async function parseWithRust(text: string): Promise<{ ok: boolean; output: string }> {
   const proc = Bun.spawn(

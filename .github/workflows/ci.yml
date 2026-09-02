@@ -11,6 +11,9 @@ permissions:
 jobs:
   test:
     runs-on: ubicloud-standard-2
+    env:
+      CHARTER_CORPUS: ${{ github.workspace }}/siblings/payment-charter-dsl/conformance
+      CHARTER_RS: ${{ github.workspace }}/siblings/payment-charter-dsl-rs
     steps:
       - uses: actions/checkout@v4
 
@@ -20,13 +23,18 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: pathscale/payment-charter-dsl-rs
-          path: ../payment-charter-dsl-rs
+          path: siblings/payment-charter-dsl-rs
 
       - name: Checkout the spec and corpus
         uses: actions/checkout@v4
         with:
           repository: pathscale/payment-charter-dsl
-          path: ../payment-charter-dsl
+          path: siblings/payment-charter-dsl
+
+      # actions/checkout refuses a path outside GITHUB_WORKSPACE, so the siblings live
+      # inside it and both harnesses are pointed at them by environment variable rather
+      # than by reproducing a directory layout with symlinks. CHARTER_CORPUS is what the
+      # Rust tests read; CHARTER_RS is what the TypeScript round-trip spawns binaries from.
 
       - uses: oven-sh/setup-bun@v1
         with:
