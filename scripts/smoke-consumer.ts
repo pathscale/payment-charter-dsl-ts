@@ -7,7 +7,7 @@
  * `tailwind-merge` being a devDependency while 127 shipped files imported it.
  */
 
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -70,7 +70,15 @@ try {
   await run(["bun", "run", "build"], here);
   await run(["bun", "pm", "pack", "--destination", dir], here);
 
-  const tarball = join(dir, "pathscale-payment-charter-dsl-0.1.0.tgz");
+  // Find the tarball rather than naming it. Hardcoding the version meant this script
+  // silently pointed at a file that stopped existing the moment the version changed, and
+  // the first release bump is exactly when a release gate must not be the thing that breaks.
+  const packed = readdirSync(dir).filter((f) => f.endsWith(".tgz"));
+  if (packed.length !== 1) {
+    console.error(`expected exactly one tarball in ${dir}, found ${packed.length}`);
+    process.exit(1);
+  }
+  const tarball = join(dir, packed[0]!);
   writeFileSync(join(dir, "package.json"), '{"name":"smoke","private":true,"type":"module"}\n');
   writeFileSync(join(dir, "use.ts"), CONSUMER);
   await run(["bun", "add", tarball], dir);
