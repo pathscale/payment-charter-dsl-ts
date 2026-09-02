@@ -1,8 +1,9 @@
 /**
  * Packs the tarball, installs it into a throwaway consumer, and emits a charter through it.
  *
- * `bun test` exercises the source tree; this exercises what actually ships. The two can differ in ways that only bite a consumer: a file missing from `files`, an export map that
- * does not resolve, a relative import that kept its `.ts` extension. UI's equivalent caught
+ * `bun test` exercises the source tree; this exercises what actually ships. The two differ
+ * in ways that only bite a consumer: a file missing from `files`, an export map that does not
+ * resolve, a relative import that kept its `.ts` extension. UI's equivalent caught
  * `tailwind-merge` being a devDependency while 127 shipped files imported it.
  */
 
