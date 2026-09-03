@@ -5,9 +5,10 @@
  * `roundtrip/` is that something. It is why the emitter needs no conformance suite of its own
  * (§1.2), and why this file is worth more than the unit tests beside it.
  *
- * Skips with a message when the Rust binary is absent rather than passing quietly — a
- * cross-implementation test that silently becomes a no-op is worse than no test, because the
- * suite still reports green.
+ * Fails when the Rust binary is absent, rather than skipping. That is deliberate: a
+ * cross-implementation guard that can be skipped will be skipped — in CI, on the machine
+ * without the sibling checkout, on the day somebody is in a hurry — and a suite reporting green
+ * having compared nothing is worse than no suite.
  */
 
 import { describe, expect, test } from "bun:test";
