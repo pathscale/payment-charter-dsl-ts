@@ -5,12 +5,14 @@
  * `roundtrip/` is that something. It is why the emitter needs no conformance suite of its own
  * (§1.2), and why this file is worth more than the unit tests beside it.
  *
- * Skips with a message when the Rust binary is absent rather than passing quietly — a
- * cross-implementation test that silently becomes a no-op is worse than no test, because the
- * suite still reports green.
+ * Fails when the Rust binary is absent, rather than skipping. That is deliberate: a
+ * cross-implementation guard that can be skipped will be skipped — in CI, on the machine
+ * without the sibling checkout, on the day somebody is in a hurry — and a suite reporting green
+ * having compared nothing is worse than no suite.
  */
 
 import { describe, expect, test } from "bun:test";
+import { documentCeiling } from "../src/ceiling.js";
 import { emit } from "../src/emit.js";
 import type { Charter } from "../src/types.js";
 
@@ -87,6 +89,26 @@ const cases: Record<string, Charter> = {
         dimension: { type: "amount", amount: "200.00", asset: "USDC_solana" },
         applies: { op: "compare", field: "merchant.category", operator: "in", value: { type: "name", name: "groceries" } },
         window: { type: "fixed", unit: "week" }, scope: "account" },
+    ],
+  },
+
+  // The `extends` line had a code path in the emitter and no case exercising it, so a chained
+  // charter was one the two implementations had never been compared on � which is the only
+  // thing this file exists to do.
+  "a child charter, pinned to its parent": {
+    charter: "dept_travel", version: 3,
+    extends: { charter: "company_wide", version: 7 },
+    resolver: { tier: "common", version: 41 }, timezone: "UTC+00:00",
+    declarations: [
+      { kind: "asset", name: "USDC_solana", reference: SOL },
+      { kind: "group", name: "payroll_recipients", members: ["7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"] },
+      { kind: "limit", name: "dept_monthly",
+        dimension: { type: "amount", amount: "800.00", asset: "USDC_solana",
+          exceptions: [
+            { value: { type: "unlimited" },
+              when: { op: "compare", field: "counterparty", operator: "in", value: { type: "name", name: "payroll_recipients" } } },
+          ] },
+        window: { type: "fixed", unit: "month" } },
     ],
   },
 
@@ -199,6 +221,63 @@ describe("the two emitters agree byte for byte", () => {
       const fromTs = emit(charter);
       const fromRust = await canonicaliseWithRust(fromTs);
       expect(fromRust).toBe(fromTs);
+    }, 120_000);
+  }
+});
+
+/**
+ * S5.1 across implementations.
+ *
+ * `charter-compile` emits `ceiling <asset> <minor units>` — the sum per asset of what the whole
+ * charter authorises, which the spec calls the number a controller is owed and the one no single
+ * limit states. `documentCeiling` computes the same figure from the JSON form.
+ *
+ * Two independent answers to "how much can this thing spend" is the failure this repository
+ * exists to prevent, and it is worse than a layout disagreement: nobody reviews a total by
+ * eye, so the two could differ for a long time without anyone noticing.
+ */
+async function compileWithRust(text: string): Promise<string> {
+  const proc = Bun.spawn(["cargo", "run", "-q", "--bin", "charter-compile"], {
+    cwd: RS,
+    stdin: new TextEncoder().encode(text),
+    stdout: "pipe",
+    stderr: "pipe",
+    env: { ...process.env, PATH: `/opt/homebrew/opt/rustup/bin:${process.env.PATH}` },
+  });
+  const [out, , code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  expect(code).toBe(0);
+  return out;
+}
+
+/** `500.00` at two decimals is `50000`, which is how the compiled form carries money. */
+function toMinorUnits(decimal: string, decimals: number): string {
+  const [whole = "0", frac = ""] = decimal.split(".");
+  const scaled = whole + frac.padEnd(decimals, "0");
+  return scaled.replace(/^0+(?=\d)/, "");
+}
+
+describe("both implementations compute the same document ceiling", () => {
+  for (const [name, charter] of Object.entries(cases)) {
+    test(name, async () => {
+      // charter-compile resolves every asset at two decimals, so the emitted text must be
+      // scaled the same way for the two figures to be comparable at all.
+      const compiled = await compileWithRust(emit(charter));
+      const fromRust = compiled
+        .split("\n")
+        .filter((l) => l.startsWith("ceiling "))
+        .map((l) => l.split(" "))
+        .map(([, asset = "", total = ""]) => `${asset} ${total}`)
+        .sort();
+
+      const fromTypeScript = documentCeiling(charter)
+        .map((c) => `${c.asset} ${toMinorUnits(c.total, 2)}`)
+        .sort();
+
+      expect(fromTypeScript).toEqual(fromRust);
     }, 120_000);
   }
 });
