@@ -16,18 +16,22 @@ jobs:
       CHARTER_RS: ${{ github.workspace }}/siblings/payment-charter-dsl-rs
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       # The round-trip suite drives the Rust parser and emitter: it is what stops the two
       # implementations agreeing on meaning while disagreeing on bytes.
       - name: Checkout payment-charter-dsl-rs
         uses: actions/checkout@v4
         with:
+          persist-credentials: false
           repository: pathscale/payment-charter-dsl-rs
           path: siblings/payment-charter-dsl-rs
 
       - name: Checkout the spec and corpus
         uses: actions/checkout@v4
         with:
+          persist-credentials: false
           repository: pathscale/payment-charter-dsl
           path: siblings/payment-charter-dsl
 
