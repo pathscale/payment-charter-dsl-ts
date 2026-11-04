@@ -13,8 +13,6 @@ name: Release
 # a commit and push, and this ships it. Pushing without a bump publishes nothing.
 
 on:
-  push:
-    branches: [master]
   workflow_dispatch:
 
 permissions:
