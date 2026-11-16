@@ -59,8 +59,11 @@ bun test          # unit tests, plus tests/roundtrip.test.ts against payment-cha
 
 `roundtrip.test.ts` emits each fixture and feeds it to `charter-parse` from the Rust repo. Two
 independent implementations of one language drift unless something compares them; that file is
-the something. It skips loudly rather than quietly when the Rust binary is absent, because a
-cross-implementation test that silently becomes a no-op still reports green.
+the something. It **fails** when the Rust binary is absent, rather than skipping: a
+cross-implementation guard that can be skipped will be skipped, in CI or on the day somebody is
+in a hurry, and a suite reporting green having compared nothing is worse than no suite. The
+cost is that this repository cannot be tested without a Rust toolchain and a sibling checkout,
+which is the correct price for the guarantee.
 
 ## Consuming it
 

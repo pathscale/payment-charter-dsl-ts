@@ -12,4 +12,11 @@
  */
 
 export { emit, type EmitOptions } from "./emit.js";
+export {
+  addDecimal,
+  compareDecimal,
+  declaredCeilings,
+  documentCeiling,
+  type DeclaredCeiling,
+} from "./ceiling.js";
 export type * from "./types.js";
