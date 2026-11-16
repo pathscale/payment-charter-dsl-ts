@@ -1,6 +1,6 @@
 {
   "name": "@pathscale/payment-charter-dsl",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "TypeScript types, JSON Schema and canonical-text emitter for the Payment Charter DSL",
   "license": "Apache-2.0 OR MIT",
   "repository": "github:pathscale/payment-charter-dsl-ts",
